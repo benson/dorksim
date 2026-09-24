@@ -1,0 +1,127 @@
+{
+ "poses": {
+  "sad": {
+   "eyes": [
+    23,
+    18,
+    35,
+    46
+   ],
+   "torso": 88,
+   "sdy": -2
+  },
+  "floor": {
+   "eyes": [
+    79,
+    36,
+    100,
+    38
+   ],
+   "small": true,
+   "torso": 12,
+   "sdy": -10
+  },
+  "sitcorner": {
+   "eyes": [
+    15,
+    28,
+    41,
+    30
+   ],
+   "torso": 65,
+   "sdy": -3,
+   "spot": [
+    104,
+    130
+   ],
+   "small": true
+  },
+  "standcorner": {
+   "eyes": [
+    13,
+    64,
+    39,
+    67
+   ],
+   "small": true,
+   "torso": 30,
+   "sdy": -6,
+   "spot": [
+    102,
+    134
+   ]
+  },
+  "bed": {
+   "eyes": [],
+   "torso": 38,
+   "breath": 80,
+   "mask": [
+    62,
+    112
+   ],
+   "spot": [
+    300,
+    240
+   ],
+   "at": [
+    0,
+    0
+   ],
+   "sdy": 0
+  }
+ },
+ "shadows": {
+  "sad": [
+   "...................pppppppppppppppppppppppppppppppppppppp...................",
+   "........pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp........",
+   "..pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp..",
+   "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+   "...pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp...",
+   "..........pppppppppppppppppppppppppppppppppppppppppppppppppppppppp.........."
+  ],
+  "floor": [
+   "..........................pppppppppppppppppppppppppppppppppppppppppppppppppppp..........................",
+   "...........pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp...........",
+   "...pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp...",
+   "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+   "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+   "...pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp...",
+   "..............pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp.............."
+  ],
+  "sitcorner": [
+   ".................pppppppppppppppppppppppppppppppppppp.................",
+   ".......pppppppppppppppppppppppppppppppppppppppppppppppppppppppp.......",
+   "..pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp..",
+   "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+   "...pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp...",
+   "..........pppppppppppppppppppppppppppppppppppppppppppppppppp.........."
+  ],
+  "standcorner": [
+   "................pppppppppppppppppppppppppppppppppp................",
+   ".......pppppppppppppppppppppppppppppppppppppppppppppppppppp.......",
+   "..pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp..",
+   "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+   "...pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp...",
+   ".........pppppppppppppppppppppppppppppppppppppppppppppppp........."
+  ],
+  "walk": [
+   "........................pppppppppppppppppppppppppppppppppppppppppppppppp........................",
+   "..........pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp..........",
+   "..pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp..",
+   "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+   "...pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp...",
+   ".............pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp............."
+  ]
+ },
+ "bed": {
+  "pos": [
+   322,
+   128
+  ],
+  "front_off": [
+   0,
+   0
+  ]
+ },
+ "walk_sdy": -6
+}

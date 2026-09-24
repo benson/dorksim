@@ -57,22 +57,24 @@ var SCENE = (function () {
 /*BEDPAL*/
 /*ROOMPAL*/
   };
-  var PAL = [], IDX = {};
-  for (var key in CH) { IDX[key] = PAL.length; PAL.push(CH[key]); }
+  var PAL = [];
+  function palette(map) { var idx = {}; for (var ch in map) { idx[ch] = PAL.length; PAL.push(map[ch]); } return idx; }
+  var IDX = palette(CH);
   var NONE = 255;
   var fb = new Uint8Array(W * H);
   var T = fb, TW = W, TH = H;             // current draw target
   function into(buf, w, h) { T = buf; TW = w; TH = h; }
 
-  function grid(rows) {
+  function grid(rows, idx) {
+    idx = idx || IDX;
     var h = rows.length, w = rows[0].length, d = new Uint8Array(w * h);
     for (var y = 0; y < h; y++) {
       if (rows[y].length !== w) throw new Error('ragged row ' + y + ' (' + rows[y].length + ' vs ' + w + '): ' + rows[y]);
       for (var x = 0; x < w; x++) {
         var ch = rows[y][x];
         if (ch === '.') { d[y * w + x] = NONE; continue; }
-        if (!(ch in IDX)) throw new Error('unmapped char ' + ch + ' in row ' + y);
-        d[y * w + x] = IDX[ch];
+        if (!(ch in idx)) throw new Error('unmapped char ' + ch + ' in row ' + y);
+        d[y * w + x] = idx[ch];
       }
     }
     return { w: w, h: h, d: d };
@@ -109,11 +111,11 @@ var SCENE = (function () {
     var P0 = POSES[name];
     P0.f = P0.inhaleRows ? { rest: grid(P0.rows), inhale: grid(P0.inhaleRows), exhale: grid(P0.rows) } : frames(P0.rows, P0.torso);
   }
-  var WALK = [grid(WALK_ROWS[0]), grid(WALK_ROWS[1])];
+  var WALK = WALK_ROWS.map(function (r) { return grid(r); });
   var BED = grid(BED_ROWS);
   // contact shadows are built from each sprite's own outline (build.py) and drawn under it
   for (var sname in POSES) if (POSES[sname].shadow) POSES[sname].sh = grid(POSES[sname].shadow);
-  var WALK_SH = [grid(WALK_SHADOW_ROWS[0]), grid(WALK_SHADOW_ROWS[1])];
+  var WALK_SH = WALK_SHADOW_ROWS.map(function (r) { return grid(r); });
 
   // hand-typed eye patches
   var EYE_SHUT = grid([
@@ -149,51 +151,17 @@ var SCENE = (function () {
   var DUST = grid(['x']), DUST_DIM = grid(['v']);
   var MOTES = [395, 100, 410, 115, 430, 104, 462, 150, 470, 190, 466, 240, 452, 258, 440, 250];
 
-  // ---- bone buttons: typed ends and a middle column stretched to fit a typed pixel-font label ----
-  var BONE_L = [
-    '..BBB...',
-    '.BWWSB..',
-    'BWSSSSB.',
-    'BSSSSSBB',
-    'BSSSSSWW',
-    'BSSSSSSS',
-    '.BSSSSSS',
-    '..BSSSSS',
-    '..BSSSSS',
-    '..BSSSSS',
-    '.BSSSSSS',
-    'BSSSSSSS',
-    'BTSSSSTT',
-    'BTSSSTBB',
-    'BVTTTVB.',
-    '.BVVVB..',
-    '..BBB...'
-  ];
-  var BONE_M = ['.', '.', '.', 'B', 'W', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'T', 'B', '.', '.', '.'];
-  var BONE_R = [
-    '...BBB..',
-    '..BSSSB.',
-    '.BSSSSTB',
-    'BBSSSSTB',
-    'WWSSSSTB',
-    'SSSSSSTB',
-    'SSSSSTB.',
-    'SSSSSB..',
-    'SSSSSB..',
-    'SSSSSB..',
-    'SSSSSTB.',
-    'SSSSSSTB',
-    'TTSSSSTB',
-    'BBSSSTVB',
-    '.BVTTVB.',
-    '..BVVVB.',
-    '...BBB..'
-  ];
-  // the pose you picked gets a golden bone: same typed shape, swapped colors
-  function gold(rows) { return rows.map(function (r) { return r.replace(/W/g, 'X').replace(/S/g, 'Y').replace(/T/g, 'Y').replace(/V/g, 'C'); }); }
-  var BONE = [grid(BONE_L), grid(BONE_M), grid(BONE_R)];
-  var BONE_GOLD = [grid(gold(BONE_L)), grid(gold(BONE_M)), grid(gold(BONE_R))];
-  var SHELF = grid(SHELF_ROWS);
+  // ---- bone buttons: generated bone art, 9-sliced (knob caps + a tiled shaft), on a generated wood panel ----
+  var WOOD = grid(WOOD_ROWS, palette(WOOD_PAL));
+  var CREAM = palette(BONE_PAL), GOLDEN = palette(BONE_GOLD_PAL);
+  var INK = palette({ B: '#2a190d' }), HI = palette({ B: BONE_HI }), HI_GOLD = palette({ B: BONE_HI_GOLD });
+  function columns(rows, idx) {        // the shaft strip as single columns, so it tiles to any exact length
+    var out = [];
+    for (var c = 0; c < rows[0].length; c++) out.push(grid(rows.map(function (r) { return r[c]; }), idx));
+    return out;
+  }
+  function slices(set, idx) { return { l: grid(set.l, idx), m: columns(set.m, idx), r: grid(set.r, idx), top: set.shaft[0], bot: set.shaft[1] }; }
+  function glyphs(rows, idx) { var f = {}; for (var ch in rows) f[ch] = grid(rows[ch], idx); return f; }
 
   // lowercase pixel font: 8 rows (ascender, x-height, one descender row), proportional widths
   var FONT_ROWS = {
@@ -214,35 +182,51 @@ var SCENE = (function () {
     t: ['.B.', '.B.', 'BBB', '.B.', '.B.', '.B.', '..B', '...'],
     y: ['....', '....', 'B..B', 'B..B', 'B..B', '.BBB', '...B', '.BB.']
   };
-  var FONT = {};
-  for (var fch in FONT_ROWS) FONT[fch] = grid(FONT_ROWS[fch]);
-  var SPACE_W = 3, BONE_H = 17, ROW_H = 26;
-  function textWidth(str) {
+  // desktop bones use the small font; the big phone bones use the large one (art/font_l.txt)
+  var SIZES = {
+    s: { bone: [slices(BONE_SIZES.s, CREAM), slices(BONE_SIZES.s, GOLDEN)], ink: glyphs(FONT_ROWS, INK),
+         hi: [glyphs(FONT_ROWS, HI), glyphs(FONT_ROWS, HI_GOLD)], space: 3, gap: 1, body: 7, pad: 3 },
+    l: { bone: [slices(BONE_SIZES.l, CREAM), slices(BONE_SIZES.l, GOLDEN)], ink: glyphs(FONT_L_ROWS, INK),
+         hi: [glyphs(FONT_L_ROWS, HI), glyphs(FONT_L_ROWS, HI_GOLD)], space: 4, gap: 2, body: 15, pad: 8 }
+  };
+  function textWidth(str, S) {
     var w = 0;
-    for (var i = 0; i < str.length; i++) w += (str[i] === ' ' ? SPACE_W : FONT[str[i]].w) + (i < str.length - 1 ? 1 : 0);
+    for (var i = 0; i < str.length; i++) w += (str[i] === ' ' ? S.space : S.ink[str[i]].w) + (i < str.length - 1 ? S.gap : 0);
     return w;
   }
   var BUTTONS = [['bed', 'lay in bed'], ['floor', 'stand on the floor'], ['sitcorner', 'sit in the corner'],
                  ['standcorner', 'stand in the corner'], ['sad', 'look sad']];
-  var BX = [], BY = [], BW = [], TXW = [], GAP = 8;
-  var uiMode = '', UI_W = W, UI_H = ROW_H, uifb = null;
-  // wide: one row of bones on a shelf under the room. tall (phones): a stack of equal bones, one per shelf.
-  function layout(mode, minW) {
-    var key = mode + ':' + (minW | 0);
+  var BX = [], BY = [], BW = [], TXW = [], GAP = 8, HIT = 1;
+  var uiMode = '', size = SIZES.s, UI_W = W, UI_H = 30, uifb = null;
+  // wide: bones in a row under the room (two rows if they don't fit). tall (phones): a stack of equal bones.
+  function layout(mode, minW, minH) {
+    var key = mode + ':' + (minW | 0) + ':' + (minH | 0);
     if (key === uiMode) return false;
     uiMode = key;
-    var i, maxW = 0, x, total = -GAP;
+    size = SIZES[mode === 'tall' ? 'l' : 's'];
+    var cap = size.bone[0], bh = cap.l.h, i, x, maxW = 0, total = -GAP;
     for (i = 0; i < BUTTONS.length; i++) {
-      TXW[i] = textWidth(BUTTONS[i][1]); BW[i] = TXW[i] + 18;
+      TXW[i] = textWidth(BUTTONS[i][1], size);
+      BW[i] = cap.l.w + size.pad + TXW[i] + size.pad + cap.r.w;
       if (BW[i] > maxW) maxW = BW[i];
       total += BW[i] + GAP;
     }
     if (mode === 'wide') {
-      UI_W = W; UI_H = ROW_H;
-      for (i = 0, x = (W - total) >> 1; i < BUTTONS.length; i++) { BX[i] = x; BY[i] = 4; x += BW[i] + GAP; }
+      var rows = total <= W - 8 ? 1 : 2, split = rows === 1 ? BUTTONS.length : 3;
+      UI_W = W; UI_H = rows * (bh + 5) + 5; HIT = 1;
+      for (var r = 0, start = 0; r < rows; r++) {
+        var end = r === 0 ? split : BUTTONS.length, rowW = -GAP;
+        for (i = start; i < end; i++) rowW += BW[i] + GAP;
+        for (i = start, x = (W - rowW) >> 1; i < end; i++) { BX[i] = x; BY[i] = 5 + r * (bh + 5); x += BW[i] + GAP; }
+        start = end;
+      }
     } else {
-      UI_W = Math.max(maxW + 16, minW | 0); UI_H = ROW_H * BUTTONS.length;
-      for (i = 0; i < BUTTONS.length; i++) { BW[i] = maxW; BX[i] = (UI_W - maxW) >> 1; BY[i] = i * ROW_H + 4; }
+      // the wood panel fills the rest of the screen; the bones sit together in the middle of it
+      UI_W = Math.max(maxW + 16, minW | 0); UI_H = Math.max(BUTTONS.length * (bh + 10) + 10, minH | 0);
+      var space = Math.min(24, (UI_H - BUTTONS.length * bh) / (BUTTONS.length + 1));
+      var top0 = (UI_H - BUTTONS.length * bh - (BUTTONS.length - 1) * space) / 2;   // the group sits centred on the panel
+      HIT = Math.floor(space / 2);
+      for (i = 0; i < BUTTONS.length; i++) { BW[i] = maxW; BX[i] = (UI_W - maxW) >> 1; BY[i] = Math.round(top0 + i * (bh + space)); }
     }
     uifb = new Uint8Array(UI_W * UI_H);
     return true;
@@ -250,22 +234,24 @@ var SCENE = (function () {
   var ui = { hover: -1, press: -1 };
 
   function drawButton(i) {
-    var set = BUTTONS[i][0] === dog.target ? BONE_GOLD : BONE;
+    var g = BUTTONS[i][0] === dog.target ? 1 : 0, b = size.bone[g];
     var y = BY[i] + (ui.press === i ? 1 : ui.hover === i ? -1 : 0), x = BX[i], w = BW[i];
-    blit(set[0], x, y);
-    for (var m = x + 8; m < x + w - 8; m++) blit(set[1], m, y);
-    blit(set[2], x + w - 8, y);
-    var str = BUTTONS[i][1], tx = x + ((w - TXW[i]) >> 1);
+    blit(b.l, x, y);
+    for (var m = x + b.l.w, k = 0; m < x + w - b.r.w; m++, k++) blit(b.m[k % b.m.length], m, y);
+    blit(b.r, x + w - b.r.w, y);
+    var str = BUTTONS[i][1], tx = x + ((w - TXW[i]) >> 1), ty = y + b.top + ((b.bot - b.top + 1 - size.body) >> 1);
+    var ink = size.ink, hi = size.hi[g];
     for (var c = 0; c < str.length; c++) {
-      if (str[c] === ' ') { tx += SPACE_W + 1; continue; }
-      blit(FONT[str[c]], tx, y + 5);
-      tx += FONT[str[c]].w + 1;
+      if (str[c] === ' ') { tx += size.space + size.gap; continue; }
+      blit(hi[str[c]], tx, ty + 1);          // engraved: a light edge under each letter
+      blit(ink[str[c]], tx, ty);
+      tx += ink[str[c]].w + size.gap;
     }
   }
 
   function drawUI() {
     into(uifb, UI_W, UI_H);
-    for (var r = 0; r * ROW_H < UI_H; r++) blit(SHELF, -((r * 157) % 240), r * ROW_H);   // each shelf a different stretch of plank
+    for (var wy = 0; wy < UI_H; wy += WOOD.h) for (var wx = 0; wx < UI_W; wx += WOOD.w) blit(WOOD, wx, wy);
     for (var i = 0; i < BUTTONS.length; i++) drawButton(i);
   }
 
@@ -289,7 +275,7 @@ var SCENE = (function () {
       var len = Math.max(Math.abs(dx), Math.abs(dy));
       dog.x += dx / len * SPEED; dog.y += dy / len * SPEED;
       if (Math.abs(dx) > 2) dog.flip = dx < 0;
-      if (dog.t % 9 === 0) dog.step ^= 1;
+      if (dog.t % 8 === 0) dog.step = (dog.step + 1) % WALK.length;   // contact, pass, contact, pass
     }
   }
 
@@ -314,8 +300,9 @@ var SCENE = (function () {
     var P, g, ax, ay, flip = false;
     if (dog.walking) {
       g = WALK[dog.step]; ax = WALK_ANCHOR[0]; ay = WALK_ANCHOR[1]; flip = dog.flip;
-      blit(WALK_SH[dog.step], Math.round(dog.x) - (flip ? g.w - ax : ax), Math.round(dog.y) - ay, flip);
-      blit(g, Math.round(dog.x) - (flip ? g.w - ax : ax), Math.round(dog.y) - ay, flip);
+      var wx = Math.round(dog.x) - (flip ? g.w - ax : ax), wy = Math.round(dog.y) - ay;
+      blit(WALK_SH[dog.step], wx, wy, flip);
+      blit(g, wx, wy - (dog.step & 1), flip);          // the passing frames ride a pixel higher
       return;
     }
     P = POSES[dog.pose];
@@ -358,7 +345,7 @@ var SCENE = (function () {
   }
 
   var SCENE_TICK = 0;
-  layout('wide', 0);
+  layout('wide', 0, 0);
   return {
     W: W, H: H, PAL: PAL, fb: fb,
     update: function () { SCENE_TICK++; update(); },
@@ -370,7 +357,7 @@ var SCENE = (function () {
     uiW: function () { return UI_W; },
     uiH: function () { return UI_H; },
     uiFb: function () { return uifb; },
-    buttons: function () { return BUTTONS.map(function (b, i) { return { go: b[0], x: BX[i], y: BY[i], w: BW[i], h: BONE_H }; }); },
+    buttons: function () { return BUTTONS.map(function (b, i) { return { go: b[0], x: BX[i], y: BY[i] - HIT, w: BW[i], h: size.bone[0].l.h + 2 * HIT }; }); },
     hover: function (i) { ui.hover = i; },
     press: function (i) { ui.press = i; }
   };
@@ -414,17 +401,13 @@ var SCENE = (function () {
     var availH = window.innerHeight - h1.offsetHeight - (tall ? 28 : 36), rs, us, gap = 0;
     if (!tall) {
       // desktop: room and a row of bones at one crisp scale, centred
-      S.layout('wide', 0);
+      S.layout('wide', 0, 0);
       rs = us = crisp(Math.min((fullW - 24) / S.W, availH / (S.H + S.uiH())), dpr);
     } else {
-      // phones: the room spans the full width; the bones get the rest, up to about 52 css px each,
-      // on a shelf panel exactly as wide as the screen
-      gap = 10;
-      rs = fullW / S.W;
-      S.layout('tall', 0);
-      us = Math.max(1, Math.min(52 / 17, fullW / S.uiW(), (availH - S.H * rs - gap) / S.uiH()));
-      S.layout('tall', Math.floor(fullW / us));
-      us = fullW / S.uiW();              // exactly edge to edge
+      // phones: the room spans the full width, the stacked bones sit on a wood panel under it
+      gap = 0;
+      rs = us = fullW / S.W;             // the bones share the room's pixel size, edge to edge
+      S.layout('tall', S.W, Math.floor((window.innerHeight - h1.offsetHeight - 18) / rs) - S.H);
     }
     if (!bones || bones.c.width !== S.uiW() || bones.c.height !== S.uiH()) bones = surface(S.uiW(), S.uiH());
     layout = S.buttons();
@@ -435,8 +418,8 @@ var SCENE = (function () {
     ctx.imageSmoothingEnabled = false; uctx.imageSmoothingEnabled = false;
     for (var i = 0; i < buttons.length; i++) {
       var b = layout[i], st = buttons[i].style;
-      st.left = b.x * us + 'px'; st.top = (b.y - 1) * us + 'px';
-      st.width = b.w * us + 'px'; st.height = (b.h + 2) * us + 'px';
+      st.left = b.x * us + 'px'; st.top = b.y * us + 'px';
+      st.width = b.w * us + 'px'; st.height = b.h * us + 'px';
     }
   }
   addEventListener('resize', fit);

@@ -1,3 +1,4 @@
 _*.png
 art/room-source.png
 __pycache__/
+.claude/

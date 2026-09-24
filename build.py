@@ -91,17 +91,59 @@ out.append('  };')
 bed = CONF.get('bed', {})
 out.append('  var BED_POS = %s, BED_FRONT_OFF = %s;' % (json.dumps(bed.get('pos', [330, 150])), json.dumps(bed.get('front_off', [0, 0]))))
 out.append('  var SPOTS = { %s };' % ', '.join(spots))
-walk = [rows_of('walk1'), rows_of('walk2')]
+walk = [rows_of('walk%d' % i) for i in (1, 2, 3, 4)]   # contact, pass, contact, pass
 wx0, wx1, wy0, wy1 = content_box(walk[0])
 out.append('  var WALK_SDY = %d;' % CONF.get('walk_sdy', -2))
 out.append('  var WALK_ANCHOR = %s;' % json.dumps(CONF.get('walk_anchor', [(wx0 + wx1) // 2, wy1])))
-out.append('  var WALK_ROWS = [[\n%s\n  ], [\n%s\n  ]];' % tuple(',\n'.join("    '%s'" % r for r in w) for w in walk))
-out.append('  var WALK_SHADOW_ROWS = [[\n%s\n  ], [\n%s\n  ]];' % tuple(',\n'.join("    '%s'" % r for r in contact_shadow(w)) for w in walk))
+out.append('  var WALK_ROWS = %s;' % json.dumps(walk).replace('], [', '],\n  ['))
+out.append('  var WALK_SHADOW_ROWS = %s;' % json.dumps([contact_shadow(w) for w in walk]).replace('], [', '],\n  ['))
 out.append('  var BED_ROWS = [\n%s\n  ];' % ',\n'.join("    '%s'" % r for r in rows_of('bed')))
+
+def read_pal(name):
+    return dict(l.split() for l in open(os.path.join(ART, name)) if l.strip())
+
+def lum(h): return 0.2126 * int(h[1:3], 16) + 0.7152 * int(h[3:5], 16) + 0.0722 * int(h[5:7], 16)
+
+def goldify(h):
+    # the picked pose's bone: same art, cream ramp pushed to gold (the dark outline stays)
+    r, g, b = int(h[1:3], 16), int(h[3:5], 16), int(h[5:7], 16)
+    if lum(h) < 70: return h
+    return '#%02x%02x%02x' % (min(255, 40 + int(0.9 * r)), int(0.8 * g) + 10, int(0.45 * b))
+
+def bone_slices(name):
+    # 9-slice a translated bone: left cap (knobs), a middle strip that tiles along the shaft, right cap
+    rows = rows_of(name)
+    W, H = len(rows[0]), len(rows)
+    col = [y for y in range(H) if rows[y][W // 2] != '.']
+    top, bot = min(col), max(col)
+    def fits(x):
+        ys = [y for y in range(H) if rows[y][x] != '.']
+        # a shaft column is solid from the shaft's top to its bottom and no taller (knob edges have gaps)
+        return ys and abs(min(ys) - top) <= 1 and abs(max(ys) - bot) <= 1 and len(ys) == max(ys) - min(ys) + 1
+    cl = next(x for x in range(W) if fits(x)) + 2
+    cr = next(x for x in range(W - 1, -1, -1) if fits(x)) - 2
+    m0 = W // 2 - 12
+    return {'l': [r[:cl] for r in rows], 'm': [r[m0:m0 + 24] for r in rows], 'r': [r[cr + 1:] for r in rows], 'shaft': [top, bot]}
+
+bone_pal = read_pal('bone.pal')
+bone_pal['a'] = bone_pal.get('a', '#271406')
+hi = max(bone_pal.values(), key=lum)
+out.append('  var BONE_PAL = %s;' % json.dumps(bone_pal))
+out.append('  var BONE_GOLD_PAL = %s;' % json.dumps({k: goldify(v) for k, v in bone_pal.items()}))
+out.append("  var BONE_HI = '%s', BONE_HI_GOLD = '%s';" % (hi, goldify(hi)))
+out.append('  var BONE_SIZES = %s;' % json.dumps({'s': bone_slices('bone_s'), 'l': bone_slices('bone_l')}))
+out.append('  var WOOD_PAL = %s;' % json.dumps(read_pal('wood.pal')))
+out.append('  var WOOD_ROWS = %s;' % json.dumps(rows_of('wood')).replace('", "', '",\n    "'))
+font_l, cur = {}, None
+for line in open(os.path.join(ART, 'font_l.txt')):
+    line = line.rstrip('\n')
+    if not line or line.startswith('#'): continue
+    if len(line) == 1 and line.isalpha(): cur = line; font_l[cur] = []; continue
+    font_l[cur].append(line)
+out.append('  var FONT_L_ROWS = %s;' % json.dumps(font_l))
 
 src = open(os.path.join(HERE, 'index.src.html'), encoding='utf8').read()
 room = ',\n'.join("    '%s'" % r for r in rows_of('room'))
-out.append('  var SHELF_ROWS = [\n%s\n  ];' % ',\n'.join("    '%s'" % r for r in rows_of('shelf')))
 def palette_js(name):
     return ''.join(",\n    '%s': '%s'" % tuple(l.split()) for l in open(os.path.join(ART, name)) if l.strip())
 html = (src.replace('/*ROOM*/', room).replace('/*SPRITES*/', '\n'.join(out))

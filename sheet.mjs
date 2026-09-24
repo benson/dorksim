@@ -1,4 +1,4 @@
-// node sheet.mjs index.html --ticks 1,120,300 [--scale 6] [--crop x,y,w,h] [--out sheet.png] [--at 10:floor,400:bed]
+// node sheet.mjs index.html --ticks 1,120,300 [--scale 6] [--crop x,y,w,h] [--out sheet.png] [--at 10:floor,400:bed] [--ui 1 --layout tall]
 // Runs the page's <script id="core"> headlessly and writes a contact sheet of the chosen ticks.
 import fs from 'fs';
 import zlib from 'zlib';
@@ -22,9 +22,12 @@ vm.createContext(ctx);
 vm.runInContext(core + '\nthis.SCENE = SCENE;', ctx);
 const S = ctx.SCENE;
 
+// --ui renders the bone panel instead of the room; --layout tall|wide picks its arrangement
+if (opt.layout) S.layout(opt.layout, opt.layout === 'tall' ? S.W : 0, opt.layout === 'tall' ? 480 : 0);
+const view = opt.ui ? { W: S.uiW(), H: S.uiH(), fb: () => S.uiFb() } : { W: S.W, H: S.H, fb: () => S.fb };
 const ticks = (opt.ticks || '1').split(',').map(Number);
 const scale = +(opt.scale || 4);
-const [cx, cy, cw, ch] = opt.crop ? opt.crop.split(',').map(Number) : [0, 0, S.W, S.H];
+const [cx, cy, cw, ch] = opt.crop ? opt.crop.split(',').map(Number) : [0, 0, view.W, view.H];
 const pal = S.PAL.map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
 const gap = 4, cols = +(opt.cols || ticks.length), rows = Math.ceil(ticks.length / cols);
 const OW = cols * cw * scale + (cols + 1) * gap, OH = rows * ch * scale + (rows + 1) * gap;
@@ -39,7 +42,7 @@ ticks.forEach((tk, n) => {
   labels.push(tk + ':' + S.state());
   const ox = gap + (n % cols) * (cw * scale + gap), oy = gap + ((n / cols) | 0) * (ch * scale + gap);
   for (let y = 0; y < ch * scale; y++) for (let x = 0; x < cw * scale; x++) {
-    const c = pal[S.fb[(cy + ((y / scale) | 0)) * S.W + cx + ((x / scale) | 0)]];
+    const c = pal[view.fb()[(cy + ((y / scale) | 0)) * view.W + cx + ((x / scale) | 0)]];
     const o = ((oy + y) * OW + ox + x) * 3;
     rgb[o] = c[0]; rgb[o + 1] = c[1]; rgb[o + 2] = c[2];
   }

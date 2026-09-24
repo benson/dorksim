@@ -10,29 +10,35 @@
 :root{--bg:#15110e;--ink:#eae2d4;--dim:#9a8e7e;--line:#3d342c}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px}
+main{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:12px}
 h1{margin:0;font-size:15px;font-weight:600;letter-spacing:.02em;color:var(--dim)}
-#stage{display:flex;align-items:center;justify-content:center;width:100%}
-#screen{position:relative}
+#stage{display:flex;flex-direction:column;align-items:center}
+/* phones and portrait windows: edge to edge, from the top */
+body.tall main{justify-content:flex-start;padding:10px 0 0;gap:8px}
+#bones{position:relative}
 canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
 /* the bones are drawn in the canvas; these real buttons sit exactly over them for pointer, keyboard and screen readers */
-nav button{position:absolute;margin:0;padding:0;border:0;background:transparent;color:transparent;font-size:1px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+nav button{position:absolute;margin:0;padding:0;border:0;background:transparent;color:transparent;font-size:1px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 nav button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 </style>
 </head>
 <body>
 <main>
   <h1>dork simulator</h1>
-  <div id="stage"><div id="screen">
+  <div id="stage">
   <canvas id="view" aria-label="pixel art of dork, a black pug, in his room"></canvas>
-  <nav>
+  <div id="bones">
+  <canvas id="ui" aria-hidden="true"></canvas>
+  <nav aria-label="what dork does">
     <button data-go="bed">lay in bed</button>
     <button data-go="floor">stand on the floor</button>
     <button data-go="sitcorner">sit in the corner</button>
     <button data-go="standcorner">stand in the corner</button>
     <button data-go="sad">look sad</button>
   </nav>
-  </div></div>
+  </div>
+  </div>
 </main>
 <script id="core">
 'use strict';
@@ -40,7 +46,7 @@ nav button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 // Dork's poses and his room were generated from photos (Codex image gen), translated at the image's
 // own pixel grid, and cleaned by hand. Eye patches, the bone buttons and their font are typed.
 var SCENE = (function () {
-  var W = 480, ROOM_H = 270, UI_H = 26, H = ROOM_H + UI_H;
+  var W = 480, H = 270;
   var CH = {
     k: '#0a0a0a', '0': '#111110', '1': '#171819', '2': '#212225', '3': '#2b2d32', '4': '#393a3e',
     '5': '#4d4d50', '6': '#605f61', '7': '#88827d', '8': '#b2a79b',
@@ -55,6 +61,8 @@ var SCENE = (function () {
   for (var key in CH) { IDX[key] = PAL.length; PAL.push(CH[key]); }
   var NONE = 255;
   var fb = new Uint8Array(W * H);
+  var T = fb, TW = W, TH = H;             // current draw target
+  function into(buf, w, h) { T = buf; TW = w; TH = h; }
 
   function grid(rows) {
     var h = rows.length, w = rows[0].length, d = new Uint8Array(w * h);
@@ -74,11 +82,11 @@ var SCENE = (function () {
   function blit(g, ox, oy, flip) {
     for (var y = 0; y < g.h; y++) {
       var fy = oy + y;
-      if (fy < 0 || fy >= H) continue;
+      if (fy < 0 || fy >= TH) continue;
       for (var x = 0; x < g.w; x++) {
         var c = g.d[y * g.w + (flip ? g.w - 1 - x : x)], fx = ox + x;
-        if (c === NONE || fx < 0 || fx >= W) continue;
-        fb[fy * W + fx] = c;
+        if (c === NONE || fx < 0 || fx >= TW) continue;
+        T[fy * TW + fx] = c;
       }
     }
   }
@@ -208,7 +216,7 @@ var SCENE = (function () {
   };
   var FONT = {};
   for (var fch in FONT_ROWS) FONT[fch] = grid(FONT_ROWS[fch]);
-  var SPACE_W = 3, BONE_H = 17, BONE_TOP = ROOM_H + 4;
+  var SPACE_W = 3, BONE_H = 17, ROW_H = 26;
   function textWidth(str) {
     var w = 0;
     for (var i = 0; i < str.length; i++) w += (str[i] === ' ' ? SPACE_W : FONT[str[i]].w) + (i < str.length - 1 ? 1 : 0);
@@ -216,18 +224,38 @@ var SCENE = (function () {
   }
   var BUTTONS = [['bed', 'lay in bed'], ['floor', 'stand on the floor'], ['sitcorner', 'sit in the corner'],
                  ['standcorner', 'stand in the corner'], ['sad', 'look sad']];
-  var BX = [], BW = [], GAP = 8, total = -GAP;
-  for (var bi = 0; bi < BUTTONS.length; bi++) { BW[bi] = textWidth(BUTTONS[bi][1]) + 18; total += BW[bi] + GAP; }
-  for (var bj = 0, bx = (W - total) >> 1; bj < BUTTONS.length; bj++) { BX[bj] = bx; bx += BW[bj] + GAP; }
+  var BX = [], BY = [], BW = [], TXW = [], GAP = 8;
+  var uiMode = '', UI_W = W, UI_H = ROW_H, uifb = null;
+  // wide: one row of bones on a shelf under the room. tall (phones): a stack of equal bones, one per shelf.
+  function layout(mode, minW) {
+    var key = mode + ':' + (minW | 0);
+    if (key === uiMode) return false;
+    uiMode = key;
+    var i, maxW = 0, x, total = -GAP;
+    for (i = 0; i < BUTTONS.length; i++) {
+      TXW[i] = textWidth(BUTTONS[i][1]); BW[i] = TXW[i] + 18;
+      if (BW[i] > maxW) maxW = BW[i];
+      total += BW[i] + GAP;
+    }
+    if (mode === 'wide') {
+      UI_W = W; UI_H = ROW_H;
+      for (i = 0, x = (W - total) >> 1; i < BUTTONS.length; i++) { BX[i] = x; BY[i] = 4; x += BW[i] + GAP; }
+    } else {
+      UI_W = Math.max(maxW + 16, minW | 0); UI_H = ROW_H * BUTTONS.length;
+      for (i = 0; i < BUTTONS.length; i++) { BW[i] = maxW; BX[i] = (UI_W - maxW) >> 1; BY[i] = i * ROW_H + 4; }
+    }
+    uifb = new Uint8Array(UI_W * UI_H);
+    return true;
+  }
   var ui = { hover: -1, press: -1 };
 
   function drawButton(i) {
     var set = BUTTONS[i][0] === dog.target ? BONE_GOLD : BONE;
-    var y = BONE_TOP + (ui.press === i ? 1 : ui.hover === i ? -1 : 0), x = BX[i], w = BW[i];
+    var y = BY[i] + (ui.press === i ? 1 : ui.hover === i ? -1 : 0), x = BX[i], w = BW[i];
     blit(set[0], x, y);
     for (var m = x + 8; m < x + w - 8; m++) blit(set[1], m, y);
     blit(set[2], x + w - 8, y);
-    var str = BUTTONS[i][1], tx = x + 9;
+    var str = BUTTONS[i][1], tx = x + ((w - TXW[i]) >> 1);
     for (var c = 0; c < str.length; c++) {
       if (str[c] === ' ') { tx += SPACE_W + 1; continue; }
       blit(FONT[str[c]], tx, y + 5);
@@ -236,7 +264,8 @@ var SCENE = (function () {
   }
 
   function drawUI() {
-    blit(SHELF, 0, ROOM_H);
+    into(uifb, UI_W, UI_H);
+    for (var r = 0; r * ROW_H < UI_H; r++) blit(SHELF, -((r * 157) % 240), r * ROW_H);   // each shelf a different stretch of plank
     for (var i = 0; i < BUTTONS.length; i++) drawButton(i);
   }
 
@@ -308,6 +337,7 @@ var SCENE = (function () {
   }
 
   function drawRoom() {
+    into(fb, W, H);
     blit(ROOM, 0, 0);
     var q = (SCENE_TICK / 5) | 0;
     for (var i = 0; i < MOTES.length; i += 2) {
@@ -328,6 +358,7 @@ var SCENE = (function () {
   }
 
   var SCENE_TICK = 0;
+  layout('wide', 0);
   return {
     W: W, H: H, PAL: PAL, fb: fb,
     update: function () { SCENE_TICK++; update(); },
@@ -335,7 +366,11 @@ var SCENE = (function () {
     go: go,
     target: function () { return dog.target; },
     state: function () { return (dog.walking ? 'walk>' : '') + dog.target + ' ' + dog.t; },
-    buttons: function () { return BUTTONS.map(function (b, i) { return { go: b[0], x: BX[i], y: BONE_TOP, w: BW[i], h: BONE_H }; }); },
+    layout: layout,
+    uiW: function () { return UI_W; },
+    uiH: function () { return UI_H; },
+    uiFb: function () { return uifb; },
+    buttons: function () { return BUTTONS.map(function (b, i) { return { go: b[0], x: BX[i], y: BY[i], w: BW[i], h: BONE_H }; }); },
     hover: function (i) { ui.hover = i; },
     press: function (i) { ui.press = i; }
   };
@@ -343,29 +378,65 @@ var SCENE = (function () {
 </script>
 <script>
 (function () {
-  var S = SCENE, cv = document.getElementById('view'), ctx = cv.getContext('2d');
-  var nav = document.querySelector('nav'), h1 = document.querySelector('h1');
-  var layout = S.buttons(), buttons = nav.querySelectorAll('button');
-  var off = document.createElement('canvas');
-  off.width = S.W; off.height = S.H;
-  var octx = off.getContext('2d'), img = octx.createImageData(S.W, S.H), rgba = new Uint32Array(img.data.buffer);
+  var S = SCENE, stage = document.getElementById('stage'), h1 = document.querySelector('h1');
+  var cv = document.getElementById('view'), ctx = cv.getContext('2d');
+  var ucv = document.getElementById('ui'), uctx = ucv.getContext('2d');
+  var nav = document.querySelector('nav'), buttons = nav.querySelectorAll('button'), layout = null;
   var LUT = new Uint32Array(S.PAL.length);
   for (var i = 0; i < S.PAL.length; i++) {
     var n = parseInt(S.PAL[i].slice(1), 16);
     LUT[i] = 0xff000000 | ((n & 0xff) << 16) | (n & 0xff00) | (n >> 16);
   }
+  function surface(w, h) {
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    var x = c.getContext('2d'), img = x.createImageData(w, h);
+    return { c: c, x: x, img: img, px: new Uint32Array(img.data.buffer) };
+  }
+  var room = surface(S.W, S.H), bones = null;
+
+  // css px per art pixel: whole device pixels where that fills the space; on high-density phones
+  // fill the width instead (uneven pixels are too small to see there)
+  function crisp(css, dpr) {
+    var whole = Math.max(1, Math.floor(css * dpr)) / dpr;
+    return dpr < 2 || whole >= css * 0.9 ? whole : css;
+  }
+  function size(c, w, h, s, dpr) {
+    var k = Math.max(1, Math.ceil(s * dpr - 1e-6));
+    c.width = w * k; c.height = h * k;
+    c.style.width = w * s + 'px'; c.style.height = h * s + 'px';
+  }
   function fit() {
     var dpr = window.devicePixelRatio || 1;
-    var availW = (innerWidth - 32) * dpr;
-    var availH = (innerHeight - h1.offsetHeight - 32 - 14) * dpr;
-    var s = Math.max(1, Math.floor(Math.min(availW / S.W, availH / S.H)));
-    cv.width = S.W * s; cv.height = S.H * s;
-    cv.style.width = S.W * s / dpr + 'px'; cv.style.height = S.H * s / dpr + 'px';
-    ctx.imageSmoothingEnabled = false;
+    var fullW = document.documentElement.clientWidth;
+    var tall = fullW < 664 || window.innerHeight - 60 > (fullW - 24) * 0.8;
+    document.body.classList.toggle('tall', tall);
+    var availH = window.innerHeight - h1.offsetHeight - (tall ? 28 : 36), rs, us, gap = 0;
+    if (!tall) {
+      // desktop: room and a row of bones at one crisp scale, centred
+      S.layout('wide', 0);
+      rs = us = crisp(Math.min((fullW - 24) / S.W, availH / (S.H + S.uiH())), dpr);
+    } else {
+      // phones: the room spans the full width; the bones get the rest, up to about 52 css px each,
+      // on a shelf panel exactly as wide as the screen
+      gap = 10;
+      rs = fullW / S.W;
+      S.layout('tall', 0);
+      us = Math.max(1, Math.min(52 / 17, fullW / S.uiW(), (availH - S.H * rs - gap) / S.uiH()));
+      S.layout('tall', Math.floor(fullW / us));
+      us = fullW / S.uiW();              // exactly edge to edge
+    }
+    if (!bones || bones.c.width !== S.uiW() || bones.c.height !== S.uiH()) bones = surface(S.uiW(), S.uiH());
+    layout = S.buttons();
+    var uw = S.uiW(), uh = S.uiH();
+    stage.style.gap = gap + 'px';
+    size(cv, S.W, S.H, rs, dpr);
+    size(ucv, uw, uh, us, dpr);
+    ctx.imageSmoothingEnabled = false; uctx.imageSmoothingEnabled = false;
     for (var i = 0; i < buttons.length; i++) {
       var b = layout[i], st = buttons[i].style;
-      st.left = b.x * s / dpr + 'px'; st.top = (b.y - 1) * s / dpr + 'px';
-      st.width = b.w * s / dpr + 'px'; st.height = (b.h + 2) * s / dpr + 'px';
+      st.left = b.x * us + 'px'; st.top = (b.y - 1) * us + 'px';
+      st.width = b.w * us + 'px'; st.height = (b.h + 2) * us + 'px';
     }
   }
   addEventListener('resize', fit);
@@ -388,15 +459,18 @@ var SCENE = (function () {
     mark();
   });
   mark();
+  function present(src, surf, canvas, c2d) {
+    for (var i = 0; i < src.length; i++) surf.px[i] = LUT[src[i]];
+    surf.x.putImageData(surf.img, 0, 0);
+    c2d.drawImage(surf.c, 0, 0, canvas.width, canvas.height);
+  }
   var STEP = 1000 / 60, acc = 0, last = performance.now();
   function frame(now) {
     acc += Math.min(250, now - last); last = now;
     while (acc >= STEP) { S.update(); acc -= STEP; }
     S.draw();
-    var fb = S.fb;
-    for (var i = 0; i < fb.length; i++) rgba[i] = LUT[fb[i]];
-    octx.putImageData(img, 0, 0);
-    ctx.drawImage(off, 0, 0, cv.width, cv.height);
+    present(S.fb, room, cv, ctx);
+    present(S.uiFb(), bones, ucv, uctx);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

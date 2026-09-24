@@ -11,7 +11,7 @@ for (let i = 0; i < rest.length; i += 2) opt[rest[i].replace(/^--/, '')] = rest[
 const html = fs.readFileSync(file, 'utf8');
 const core = html.match(/<script id="core">([\s\S]*?)<\/script>/)[1];
 // hand-typed rule: blit() is the only thing allowed to write a pixel, and nothing may compute shapes
-const writes = core.match(/fb\[[^\]]+\]\s*=[^=]/g) || [];
+const writes = core.match(/\bT\[[^\]]+\]\s*=[^=]/g) || [];
 const banned = core.match(/Math\.(random|sin|cos|atan2|hypot|sqrt)|\.fill\(|\.set\(/g) || [];
 if (writes.length !== 1 || banned.length) {
   console.error('not hand-typed: ' + writes.length + ' pixel writes (want 1, inside blit), banned calls: ' + (banned.join(', ') || 'none'));
